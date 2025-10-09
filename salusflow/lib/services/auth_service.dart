@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:salusflow/database/database_helper.dart';
 
@@ -94,9 +93,9 @@ class AuthService extends ChangeNotifier {
       }
 
       // Criar novo usuário (apenas pessoa física)
-      int userId = 0;
+      // Verificar se a coluna birth_date existe antes de incluí-la
+      int userId;
       try {
-        // Tenta inserir com birth_date
         userId = await _dbHelper.insertUser({
           'cpf_cnpj': cpf,
           'name': name,
@@ -118,11 +117,7 @@ class AuthService extends ChangeNotifier {
             'created_at': DateTime.now().toIso8601String(),
           });
         } else {
-          debugPrint('Erro ao inserir usuário: ${e.toString()}');
-          // Se for outro erro, retorne falso em vez de propagar
-          _isLoading = false;
-          notifyListeners();
-          return false;
+          rethrow; // Se for outro erro, propague-o
         }
       }
 
@@ -158,5 +153,9 @@ class AuthService extends ChangeNotifier {
     _userId = null;
     notifyListeners();
   }
+
+  Future validateCurrentPassword(String text) async {}
+
+  Future updatePassword(String text) async {}
 
 }
