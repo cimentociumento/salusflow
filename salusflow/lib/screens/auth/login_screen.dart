@@ -163,13 +163,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (success) {
           if (!mounted) return;
-          // Redirecionar baseado no tipo de usuário
-          final authService = Provider.of<AuthService>(context, listen: false);
-          if (authService.userType == 'juridica') {
-            Navigator.pushReplacementNamed(context, '/juridica-home');
-          } else {
-            Navigator.pushReplacementNamed(context, '/home');
-          }
+          Navigator.pushReplacementNamed(context, '/home');
         } else {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(

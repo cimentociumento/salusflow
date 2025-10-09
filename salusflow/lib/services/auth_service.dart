@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:salusflow/database/database_helper.dart';
-import 'package:salusflow/services/certificate_service.dart';
 
 class AuthService extends ChangeNotifier {
   final DatabaseHelper _dbHelper = DatabaseHelper();
-  final CertificateService _certificateService = CertificateService();
   
   String? _userName;
   String? _userCpfCnpj;
   String? _userEmail;
   String? _userType;
+  String? _userBirthDate;
   int? _userId;
   bool _isLoading = false;
 
@@ -19,6 +19,7 @@ class AuthService extends ChangeNotifier {
   String? get userCnpj => _userCpfCnpj;
   String? get userEmail => _userEmail;
   String? get userType => _userType;
+  String? get userBirthDate => _userBirthDate;
   int? get userId => _userId;
   bool get isLoading => _isLoading;
 
@@ -32,6 +33,7 @@ class AuthService extends ChangeNotifier {
     _userCpfCnpj = prefs.getString('userCpfCnpj');
     _userEmail = prefs.getString('userEmail');
     _userType = prefs.getString('userType');
+    _userBirthDate = prefs.getString('userBirthDate');
     _userId = prefs.getInt('userId');
     notifyListeners();
   }
@@ -42,6 +44,7 @@ class AuthService extends ChangeNotifier {
     await prefs.setString('userCpfCnpj', _userCpfCnpj ?? '');
     await prefs.setString('userEmail', _userEmail ?? '');
     await prefs.setString('userType', _userType ?? '');
+    await prefs.setString('userBirthDate', _userBirthDate ?? '');
     await prefs.setInt('userId', _userId ?? 0);
   }
 
@@ -61,6 +64,7 @@ class AuthService extends ChangeNotifier {
           _userCpfCnpj = user['cpf_cnpj'];
           _userEmail = user['email'];
           _userType = user['user_type'];
+          _userBirthDate = user['birth_date'];
           await _saveUserData();
         }
       }
@@ -75,75 +79,61 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<bool> loginWithCertificate(String cnpj, String certificateData) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
 
-      // Validar certificado digital
-      final isValidCertificate = await _certificateService.validateCertificate(cnpj, certificateData);
-      
-      if (isValidCertificate) {
-        final user = await _dbHelper.getUserByCpfCnpj(cnpj);
-        if (user != null) {
-          _userId = user['id'];
-          _userName = user['name'];
-          _userCpfCnpj = user['cpf_cnpj'];
-          _userEmail = user['email'];
-          _userType = user['user_type'];
-          await _saveUserData();
-        }
-      }
-      
-      _isLoading = false;
-      notifyListeners();
-      return isValidCertificate;
-    } catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  Future<bool> register(String name, String cpfCnpj, String email, String password, String userType) async {
+  Future<bool> register(String name, String cpf, String email, String password, String birthDate) async {
     try {
       _isLoading = true;
       notifyListeners();
 
       // Verificar se usuário já existe
-      final existingUser = await _dbHelper.getUserByCpfCnpj(cpfCnpj);
+      final existingUser = await _dbHelper.getUserByCpfCnpj(cpf);
       if (existingUser != null) {
         _isLoading = false;
         notifyListeners();
         return false; // Usuário já existe
       }
 
-      // Criar novo usuário
-      final userId = await _dbHelper.insertUser({
-        'cpf_cnpj': cpfCnpj,
-        'name': name,
-        'email': email,
-        'password': password, // Em produção, usar hash
-        'user_type': userType,
-        'created_at': DateTime.now().toIso8601String(),
-      });
+      // Criar novo usuário (apenas pessoa física)
+      int userId = 0;
+      try {
+        // Tenta inserir com birth_date
+        userId = await _dbHelper.insertUser({
+          'cpf_cnpj': cpf,
+          'name': name,
+          'email': email,
+          'password': password, // Em produção, usar hash
+          'user_type': 'fisica',
+          'birth_date': birthDate,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      } catch (e) {
+        // Se falhar, tente novamente sem o campo birth_date
+        if (e.toString().contains('birth_date')) {
+          userId = await _dbHelper.insertUser({
+            'cpf_cnpj': cpf,
+            'name': name,
+            'email': email,
+            'password': password,
+            'user_type': 'fisica',
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        } else {
+          debugPrint('Erro ao inserir usuário: ${e.toString()}');
+          // Se for outro erro, retorne falso em vez de propagar
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
+      }
 
       if (userId > 0) {
         _userId = userId;
         _userName = name;
-        _userCpfCnpj = cpfCnpj;
+        _userCpfCnpj = cpf;
         _userEmail = email;
-        _userType = userType;
+        _userType = 'fisica';
+        _userBirthDate = birthDate;
         await _saveUserData();
-
-        // Se for pessoa jurídica, gerar certificado digital
-        if (userType == 'juridica') {
-          await _certificateService.generateCertificate(
-            cnpj: cpfCnpj,
-            companyName: name,
-            userId: userId,
-          );
-        }
       }
       
       _isLoading = false;
@@ -164,15 +154,9 @@ class AuthService extends ChangeNotifier {
     _userCpfCnpj = null;
     _userEmail = null;
     _userType = null;
+    _userBirthDate = null;
     _userId = null;
     notifyListeners();
   }
 
-  // Verificar se usuário tem certificado válido
-  Future<bool> hasValidCertificate() async {
-    if (_userType != 'juridica' || _userCpfCnpj == null) {
-      return false;
-    }
-    return await _certificateService.hasValidCertificate(_userCpfCnpj!);
-  }
 }

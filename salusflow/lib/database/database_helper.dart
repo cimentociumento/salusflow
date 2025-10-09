@@ -16,7 +16,19 @@ class DatabaseHelper {
 
   Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), 'salusflow.db');
-    return await openDatabase(path, version: 1, onCreate: _onCreate);
+    return await openDatabase(
+      path, 
+      version: 2, 
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade
+    );
+  }
+  
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Adicionar coluna birth_date se não existir
+      await db.execute('ALTER TABLE users ADD COLUMN birth_date TEXT');
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -29,6 +41,7 @@ class DatabaseHelper {
         email TEXT NOT NULL,
         password TEXT NOT NULL,
         user_type TEXT NOT NULL,
+        birth_date TEXT,
         created_at TEXT NOT NULL
       )
     ''');
@@ -51,37 +64,19 @@ class DatabaseHelper {
       )
     ''');
 
-    // Tabela de certificados digitais
-    await db.execute('''
-      CREATE TABLE digital_certificates (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        certificate_id TEXT UNIQUE NOT NULL,
-        cnpj TEXT NOT NULL,
-        company_name TEXT NOT NULL,
-        valid_from TEXT NOT NULL,
-        valid_to TEXT NOT NULL,
-        issuer TEXT NOT NULL,
-        serial_number TEXT NOT NULL,
-        public_key TEXT NOT NULL,
-        is_valid INTEGER DEFAULT 1,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users (id)
-      )
-    ''');
     
-    // Tabela de permissões de acesso
+    // Tabela de permissões de acesso para médicos
     await db.execute('''
-      CREATE TABLE permissions (
+      CREATE TABLE doctor_permissions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        clinic_id INTEGER NOT NULL,
+        doctor_id INTEGER NOT NULL,
+        doctor_name TEXT NOT NULL,
+        doctor_address TEXT NOT NULL,
         is_active INTEGER DEFAULT 1,
-        notes TEXT,
         granted_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users (id),
-        FOREIGN KEY (clinic_id) REFERENCES users (id)
+        FOREIGN KEY (user_id) REFERENCES users (id)
       )
     ''');
 
@@ -92,42 +87,18 @@ class DatabaseHelper {
   Future<void> _insertSampleData(Database db) async {
     // Usuário de exemplo - Pessoa Física
     await db.insert('users', {
-      'cpf_cnpj': '123.456.789-00',
-      'name': 'João Silva',
-      'email': 'joao@email.com',
+      'cpf_cnpj': '111.111.111-11',
+      'name': 'Ciclano de Tal',
+      'email': 'fulano.de.tal@hotmail.com',
       'password': '123456', // Em produção, usar hash
       'user_type': 'fisica',
-      'created_at': DateTime.now().toIso8601String(),
-    });
-
-    // Usuário de exemplo - Pessoa Jurídica
-    await db.insert('users', {
-      'cpf_cnpj': '12.345.678/0001-90',
-      'name': 'Clínica SalusFlow',
-      'email': 'contato@salusflow.com',
-      'password': '123456', // Em produção, usar hash
-      'user_type': 'juridica',
-      'created_at': DateTime.now().toIso8601String(),
-    });
-
-    // Certificado digital de exemplo
-    await db.insert('digital_certificates', {
-      'user_id': 2, // Clínica SalusFlow
-      'certificate_id': 'CERT-001-2024',
-      'cnpj': '12.345.678/0001-90',
-      'company_name': 'Clínica SalusFlow',
-      'valid_from': '2024-01-01T00:00:00.000Z',
-      'valid_to': '2025-12-31T23:59:59.000Z',
-      'issuer': 'Autoridade Certificadora Nacional',
-      'serial_number': 'SN-123456789',
-      'public_key': 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...',
-      'is_valid': 1,
+      'birth_date': '1990-05-15',
       'created_at': DateTime.now().toIso8601String(),
     });
 
     // Prontuário de exemplo
     await db.insert('medical_records', {
-      'user_id': 1, // João Silva
+      'user_id': 1, // Ciclano de Tal
       'allergies': 'Penicilina, Amendoim',
       'diagnoses': 'Hipertensão arterial, Diabetes tipo 2',
       'medications': 'Losartana 50mg (1x ao dia), Metformina 850mg (2x ao dia)',
@@ -138,6 +109,27 @@ class DatabaseHelper {
       'created_at': DateTime.now().toIso8601String(),
       'updated_at': DateTime.now().toIso8601String(),
     });
+
+    // Permissões de médicos de exemplo
+    final doctors = [
+      {'id': 1, 'name': 'Claudio Peralta', 'address': 'Rua das Flores,123 - Centro'},
+      {'id': 2, 'name': 'Arnaldo da Silva', 'address': 'Av. Brasil,789 - Jardins'},
+      {'id': 3, 'name': 'Davi Ulisses Moreto GussO', 'address': 'Av. Paulista, 1000 - Bela Vista'},
+      {'id': 4, 'name': 'Heitor Scalco Neto', 'address': 'Rua Consolação, 250 - Centro'},
+      {'id': 5, 'name': 'Murilo Nhoqui', 'address': 'Rua Augusta, 500 - Cosnsolação'},
+    ];
+
+    for (var doctor in doctors) {
+      await db.insert('doctor_permissions', {
+        'user_id': 1,
+        'doctor_id': doctor['id'],
+        'doctor_name': doctor['name'],
+        'doctor_address': doctor['address'],
+        'is_active': (doctor['id'] as int) <= 4 ? 1 : 0, // Primeiros 4 ativos, último inativo
+        'granted_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+    }
   }
 
   // Métodos para usuários
@@ -161,15 +153,6 @@ class DatabaseHelper {
     return user != null && user['password'] == password;
   }
   
-  // Obter todas as pessoas jurídicas
-  Future<List<Map<String, dynamic>>> getAllJuridicalUsers() async {
-    final db = await database;
-    return await db.query(
-      'users',
-      where: 'user_type = ?',
-      whereArgs: ['juridica'],
-    );
-  }
 
   // Métodos para prontuários
   Future<int> insertMedicalRecord(Map<String, dynamic> record) async {
@@ -201,78 +184,56 @@ class DatabaseHelper {
     );
   }
 
-  // Métodos para certificados digitais
-  Future<int> insertCertificate(Map<String, dynamic> certificate) async {
-    final db = await database;
-    return await db.insert('digital_certificates', certificate);
-  }
-
-  Future<Map<String, dynamic>?> getCertificateByCnpj(String cnpj) async {
-    final db = await database;
-    final result = await db.query(
-      'digital_certificates',
-      where: 'cnpj = ? AND is_valid = 1',
-      whereArgs: [cnpj],
-    );
-    return result.isNotEmpty ? result.first : null;
-  }
-
-  Future<List<Map<String, dynamic>>> getAllCertificates() async {
-    final db = await database;
-    return await db.query('digital_certificates');
-  }
 
   Future<void> close() async {
     final db = await database;
     await db.close();
   }
   
-  // Métodos para permissões
-  Future<int> insertPermission(Map<String, dynamic> permission) async {
+  // Métodos para permissões de médicos
+  Future<int> insertDoctorPermission(Map<String, dynamic> permission) async {
     final db = await database;
-    return await db.insert('permissions', permission);
+    return await db.insert('doctor_permissions', permission);
   }
   
-  Future<Map<String, dynamic>?> getPermission(int userId, int clinicId) async {
+  Future<Map<String, dynamic>?> getDoctorPermission(int userId, int doctorId) async {
     final db = await database;
     final result = await db.query(
-      'permissions',
-      where: 'user_id = ? AND clinic_id = ?',
-      whereArgs: [userId, clinicId],
+      'doctor_permissions',
+      where: 'user_id = ? AND doctor_id = ?',
+      whereArgs: [userId, doctorId],
     );
     return result.isNotEmpty ? result.first : null;
   }
   
-  Future<bool> updatePermission(int userId, int clinicId, Map<String, dynamic> data) async {
+  Future<bool> updateDoctorPermission(int userId, int doctorId, Map<String, dynamic> data) async {
     final db = await database;
     final result = await db.update(
-      'permissions',
+      'doctor_permissions',
       data,
-      where: 'user_id = ? AND clinic_id = ?',
-      whereArgs: [userId, clinicId],
+      where: 'user_id = ? AND doctor_id = ?',
+      whereArgs: [userId, doctorId],
     );
     return result > 0;
   }
   
-  Future<List<Map<String, dynamic>>> getUserPermissions(int userId) async {
+  Future<List<Map<String, dynamic>>> getUserDoctorPermissions(int userId) async {
     final db = await database;
-    return await db.rawQuery('''
-      SELECT p.*, u.name as clinic_name, u.cpf_cnpj as clinic_cpf_cnpj
-      FROM permissions p
-      JOIN users u ON p.clinic_id = u.id
-      WHERE p.user_id = ?
-      ORDER BY p.updated_at DESC
-    ''', [userId]);
+    return await db.query(
+      'doctor_permissions',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'updated_at DESC',
+    );
   }
   
-  Future<List<Map<String, dynamic>>> getActiveClinicPermissions(int userId) async {
+  Future<List<Map<String, dynamic>>> getActiveDoctorPermissions(int userId) async {
     final db = await database;
-    return await db.rawQuery('''
-      SELECT p.*, u.name as clinic_name, u.cpf_cnpj as clinic_cpf_cnpj
-      FROM permissions p
-      JOIN users u ON p.clinic_id = u.id
-      WHERE p.user_id = ? AND p.is_active = 1
-      ORDER BY p.updated_at DESC
-    ''', [userId]);
+    return await db.query(
+      'doctor_permissions',
+      where: 'user_id = ? AND is_active = 1',
+      whereArgs: [userId],
+      orderBy: 'updated_at DESC',
+    );
   }
 }

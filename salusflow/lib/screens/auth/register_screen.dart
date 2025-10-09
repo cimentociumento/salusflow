@@ -17,6 +17,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _birthDateController = MaskedTextController(mask: '00/00/0000');
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _acceptTerms = false;
@@ -85,6 +86,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       }
                       if (!value.contains('@') || !value.contains('.')) {
                         return 'E-mail inválido';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _birthDateController,
+                    decoration: const InputDecoration(
+                      labelText: 'Data de Nascimento',
+                      hintText: 'DD/MM/AAAA',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.calendar_today),
+                    ),
+                    keyboardType: TextInputType.number,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Por favor, insira sua data de nascimento';
+                      }
+                      if (value.length != 10) {
+                        return 'Data inválida (DD/MM/AAAA)';
                       }
                       return null;
                     },
@@ -241,12 +262,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       try {
         final authService = Provider.of<AuthService>(context, listen: false);
+        // Converter data de DD/MM/AAAA para AAAA-MM-DD
+        final birthDate = _convertDateToISO(_birthDateController.text);
+        
         final success = await authService.register(
           _nameController.text,
           _cpfController.text,
           _emailController.text,
           _passwordController.text,
-          'fisica', // Tipo de usuário padrão para registro
+          birthDate,
         );
 
         if (success) {
@@ -276,5 +300,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
         }
       }
     }
+  }
+
+  String _convertDateToISO(String date) {
+    if (date.length == 10) {
+      // Converter de DD/MM/AAAA para AAAA-MM-DD
+      final parts = date.split('/');
+      if (parts.length == 3) {
+        return '${parts[2]}-${parts[1]}-${parts[0]}';
+      }
+    }
+    return date; // Retornar como está se não conseguir converter
   }
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:salusflow/database/database_helper.dart';
 
 class PermissionService {
@@ -7,55 +8,57 @@ class PermissionService {
 
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
-  // Conceder permissão para uma clínica acessar o prontuário
+  // Conceder permissão para um médico acessar o prontuário
   Future<bool> grantPermission({
     required int userId,
-    required int clinicId,
-    String? notes,
+    required int doctorId,
+    required String doctorName,
+    required String doctorAddress,
   }) async {
     try {
       final permissionData = {
         'user_id': userId,
-        'clinic_id': clinicId,
+        'doctor_id': doctorId,
+        'doctor_name': doctorName,
+        'doctor_address': doctorAddress,
         'is_active': 1,
-        'notes': notes,
         'granted_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       };
 
       // Verificar se já existe uma permissão
-      final existingPermission = await _dbHelper.getPermission(userId, clinicId);
+      final existingPermission = await _dbHelper.getDoctorPermission(userId, doctorId);
 
       if (existingPermission != null) {
         // Atualizar permissão existente
-        return await _dbHelper.updatePermission(userId, clinicId, {'is_active': 1, 'updated_at': DateTime.now().toIso8601String()});
+        return await _dbHelper.updateDoctorPermission(userId, doctorId, {'is_active': 1, 'updated_at': DateTime.now().toIso8601String()});
       } else {
         // Criar nova permissão
-        final result = await _dbHelper.insertPermission(permissionData);
+        final result = await _dbHelper.insertDoctorPermission(permissionData);
         return result > 0;
       }
     } catch (e) {
-      print('Erro ao conceder permissão: $e');
+      debugPrint('Erro ao conceder permissão: $e');
       return false;
     }
   }
 
-  // Revogar permissão de uma clínica
+  // Revogar permissão de um médico
   Future<bool> revokePermission({
     required int userId,
-    required int clinicId,
+    required int doctorId,
   }) async {
     try {
       // Verificar se existe uma permissão
-      final existingPermission = await _dbHelper.getPermission(userId, clinicId);
+      final existingPermission = await _dbHelper.getDoctorPermission(userId, doctorId);
 
       if (existingPermission != null) {
         // Desativar permissão existente
-        return await _dbHelper.updatePermission(userId, clinicId, {'is_active': 0, 'updated_at': DateTime.now().toIso8601String()});
+        return await _dbHelper.updateDoctorPermission(userId, doctorId, {'is_active': 0, 'updated_at': DateTime.now().toIso8601String()});
       }
       return false;
     } catch (e) {
-      print('Erro ao revogar permissão: $e');
+      debugPrint('Erro ao revogar permissão: $e');
       return false;
     }
   }
@@ -63,33 +66,33 @@ class PermissionService {
   // Obter todas as permissões de um usuário
   Future<List<Map<String, dynamic>>> getUserPermissions(int userId) async {
     try {
-      return await _dbHelper.getUserPermissions(userId);
+      return await _dbHelper.getUserDoctorPermissions(userId);
     } catch (e) {
-      print('Erro ao obter permissões: $e');
+      debugPrint('Erro ao obter permissões: $e');
       return [];
     }
   }
 
-  // Verificar se uma clínica tem permissão para acessar o prontuário de um usuário
+  // Verificar se um médico tem permissão para acessar o prontuário de um usuário
   Future<bool> hasPermission({
     required int userId,
-    required int clinicId,
+    required int doctorId,
   }) async {
     try {
-      final permission = await _dbHelper.getPermission(userId, clinicId);
+      final permission = await _dbHelper.getDoctorPermission(userId, doctorId);
       return permission != null && permission['is_active'] == 1;
     } catch (e) {
-      print('Erro ao verificar permissão: $e');
+      debugPrint('Erro ao verificar permissão: $e');
       return false;
     }
   }
 
-  // Obter todas as clínicas com permissão ativa para um usuário
-  Future<List<Map<String, dynamic>>> getActiveClinicPermissions(int userId) async {
+  // Obter todos os médicos com permissão ativa para um usuário
+  Future<List<Map<String, dynamic>>> getActiveDoctorPermissions(int userId) async {
     try {
-      return await _dbHelper.getActiveClinicPermissions(userId);
+      return await _dbHelper.getActiveDoctorPermissions(userId);
     } catch (e) {
-      print('Erro ao obter clínicas com permissão: $e');
+      debugPrint('Erro ao obter médicos com permissão: $e');
       return [];
     }
   }

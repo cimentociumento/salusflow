@@ -20,13 +20,12 @@ class _MedicalRecordScreenState extends State<MedicalRecordScreen> {
   final _bloodTypeController = TextEditingController();
   final _vaccinationController = TextEditingController();
   final _observationsController = TextEditingController();
-  
+
   bool _authorizeTransfusion = false;
   final List<File> _reportImages = [];
   final List<File> _prescriptionImages = [];
   final ImagePicker _picker = ImagePicker();
   final MedicalRecordService _medicalRecordService = MedicalRecordService();
-  bool _isLoading = false;
 
   @override
   void initState() {
@@ -37,7 +36,9 @@ class _MedicalRecordScreenState extends State<MedicalRecordScreen> {
   Future<void> _loadExistingRecord() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     if (authService.userId != null) {
-      final record = await _medicalRecordService.getMedicalRecord(authService.userId!);
+      final record = await _medicalRecordService.getMedicalRecord(
+        authService.userId!,
+      );
       if (record != null) {
         setState(() {
           _allergiesController.text = record['allergies'] ?? '';
@@ -270,20 +271,24 @@ class _MedicalRecordScreenState extends State<MedicalRecordScreen> {
         setState(() {
           _reportImages.add(File(image.path));
         });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Laudo/Exame adicionado com sucesso!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Laudo/Exame adicionado com sucesso!'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: Text('Erro ao selecionar imagem: ${e.toString()}'),
+            backgroundColor: Colors.red,
           ),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erro ao selecionar imagem: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
 
@@ -298,37 +303,39 @@ class _MedicalRecordScreenState extends State<MedicalRecordScreen> {
         setState(() {
           _prescriptionImages.add(File(image.path));
         });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Receita médica adicionada com sucesso!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Receita médica adicionada com sucesso!'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: Text('Erro ao selecionar imagem: ${e.toString()}'),
+            backgroundColor: Colors.red,
           ),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erro ao selecionar imagem: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
 
   Future<void> _downloadPDF() async {
-    setState(() {
-      _isLoading = true;
-    });
-
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       if (authService.userId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Usuário não autenticado'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Usuário não autenticado'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
         return;
       }
 
@@ -337,34 +344,36 @@ class _MedicalRecordScreenState extends State<MedicalRecordScreen> {
 
       // Gerar dados para PDF
       await _medicalRecordService.generatePDFData(authService.userId!);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Gerando PDF do prontuário...'),
-          backgroundColor: Colors.blue,
-        ),
-      );
-      
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Gerando PDF do prontuário...'),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+
       // Simular geração do PDF
       await Future.delayed(const Duration(seconds: 2));
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('PDF do prontuário baixado com sucesso!'),
-          backgroundColor: Colors.green,
-        ),
-      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('PDF do prontuário baixado com sucesso!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erro ao gerar PDF: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao gerar PDF: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -384,19 +393,23 @@ class _MedicalRecordScreenState extends State<MedicalRecordScreen> {
     );
 
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Prontuário salvo com sucesso!'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Prontuário salvo com sucesso!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Erro ao salvar prontuário'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro ao salvar prontuário'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }
